@@ -1,0 +1,19 @@
+{
+  "name": "fb-to-gcal",
+  "version": "1.0.0",
+  "description": "Scrape Facebook events and add them to your Google Calendar",
+  "main": "build/src/index.js",
+  "author": "Joe MacMahon <joe.macmahon@gmail.com>",
+  "license": "GPL-3.0-or-later",
+  "dependencies": {
+    "chai": "^4.2.0",
+    "mocha": "^5.2.0",
+    "tslint": "^5.12.1",
+    "tslint-config-standard": "^8.0.1",
+    "typescript": "^3.3.1"
+  },
+  "devDependencies": {
+    "@types/chai": "^4.1.7",
+    "@types/mocha": "^5.2.5"
+  }
+}
