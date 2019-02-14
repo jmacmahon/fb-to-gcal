@@ -1,26 +1,28 @@
-import { hasInnerText, JustDate, validMonths } from './index'
+import moment = require('moment')
+import { JustDate } from './index'
 
-export function scrapeDate (dateSpan: Element, year: number): JustDate {
-  if (dateSpan.childElementCount !== 2) {
-    throw new Error('Date span did not contain two children')
+export type DateStringValidator = (dateString: string) => JustDate | undefined
+
+export function scrapeDate (doc: Document, validator = validateDate): JustDate {
+  const withAriaLabel = Array.from(doc.querySelectorAll('span[aria-label]'))
+  if (withAriaLabel.length === 0) {
+    throw new Error('no span[aria-label] element')
   }
-  const dateSpanChildren = Array.from(dateSpan.childNodes)
-  const monthSpan = dateSpanChildren[0]
-  console.log(monthSpan)
-  if (!hasInnerText(monthSpan)) {
-    throw new Error('Month field did not have an innerText')
+  const ariaLabels = withAriaLabel.map(span => span.getAttribute('aria-label')!)
+  for (const ariaLabel of ariaLabels) {
+    const validated = validator(ariaLabel)
+    if (validated !== undefined) {
+      return validated
+    }
   }
-  if (!validMonths.includes(monthSpan.innerText.toUpperCase())) {
-    throw new Error(`Month field was invalid: ${monthSpan.innerText}`)
+  throw new Error('no span[aria-label] contained a valid date')
+}
+
+export const validateDate: DateStringValidator = (dateString) => {
+  const parsed = moment(dateString, 'dddd, D MMMM YYYY')
+  if (!parsed.isValid()) {
+    return undefined
+  } else {
+    return { year: parsed.year(), month: parsed.month() + 1, day: parsed.date() }
   }
-  const month = validMonths.indexOf(monthSpan.innerText) + 1
-  const dayOfMonthSpan = dateSpanChildren[1]
-  if (!hasInnerText(dayOfMonthSpan)) {
-    throw new Error('Day of month field did not have an innerText')
-  }
-  const parsedDayOfMonth = parseInt(dayOfMonthSpan.innerText, 10)
-  if (isNaN(parsedDayOfMonth)) {
-    throw new Error(`Day of month field was invalid: ${dayOfMonthSpan.innerText}`)
-  }
-  return { year, month, day: parsedDayOfMonth }
 }

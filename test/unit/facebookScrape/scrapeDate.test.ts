@@ -1,72 +1,94 @@
 import { expect } from 'chai'
-import { scrapeDate } from '../../../src/facebookScrape/scrapeDate'
+import { JSDOM } from 'jsdom'
+import { JustDate } from '../../../src/facebookScrape'
+import { DateStringValidator, scrapeDate, validateDate } from '../../../src/facebookScrape/scrapeDate'
 
 describe('date scraper', () => {
-  it('should throw if the date span did not contain two children', () => {
-    const badCounts = [-1, 0, 1, 3, 4]
-    badCounts.forEach(badCount => {
-      const dateSpanStub = { childElementCount: badCount } as Element
-      expect(() => scrapeDate(dateSpanStub, 2019)).to.throw(Error, 'Date span did not contain two children')
+  describe('scrapeDate', () => {
+    const stubAriaLabelValidator = () => undefined
+
+    const getDocument = (body: string): Document => {
+      const html = `
+      <!doctype html>
+      <html lang="en">
+
+      <head>
+        <meta charset="utf-8">
+        <title></title>
+      </head>
+
+      <body>
+      ${body}
+      </body>
+
+      </html>`
+      const dom = new JSDOM(html)
+      return dom.window.document
+    }
+    it('should reject documents with no span[aria-label] elements', () => {
+      const testCases = [
+        getDocument(''),
+        getDocument('<span></span>'),
+        getDocument('<div aria-label="something"></span>')
+      ]
+      testCases.forEach(doc => {
+        expect(() => scrapeDate(doc, stubAriaLabelValidator)).to.throw(Error, 'no span[aria-label] element')
+      })
+    })
+
+    it('should pass the aria-label field to the date parser', () => {
+      const testCases = [
+        { doc: getDocument('<span aria-label="something"></span>'), expectedAriaLabels: ['something'] },
+        { doc: getDocument('<span aria-label="something"></span><span aria-label="something else"></span>'), expectedAriaLabels: ['something', 'something else'] },
+        { doc: getDocument('<span aria-label="something"></span><span></span><span aria-label="something else"></span>'), expectedAriaLabels: ['something', 'something else'] }
+      ]
+      testCases.forEach(({ doc, expectedAriaLabels }) => {
+        const capturedAriaLabels: string[] = []
+        const fakeValidator: DateStringValidator = (ariaLabel) => {
+          capturedAriaLabels.push(ariaLabel)
+          return undefined
+        }
+        try {
+          scrapeDate(doc, fakeValidator)
+        } catch (error) {
+          // pass
+        }
+        expect(capturedAriaLabels).to.deep.equal(expectedAriaLabels)
+      })
+    })
+
+    it('should return the first non-undefined result from the validator', () => {
+      const doc = getDocument('<span aria-label="foo"></span><span aria-label="bar"></span><span aria-label="baz"></span>')
+      const firstDate: JustDate = { year: 2019, month: 2, day: 14 }
+      const returnValues = [undefined, firstDate, { year: 2018, month: 11, day: 9 }]
+      const fakeValidator: DateStringValidator = () => {
+        return returnValues.shift()
+      }
+      expect(scrapeDate(doc, fakeValidator)).to.deep.equal(firstDate)
+    })
+
+    it('should throw if the validator returned undefined for each aria-label', () => {
+      const doc = getDocument('<span aria-label="foo"></span><span aria-label="bar"></span><span aria-label="baz"></span>')
+      const fakeValidator: DateStringValidator = () => undefined
+      expect(() => scrapeDate(doc, fakeValidator)).to.throw(Error, 'no span[aria-label] contained a valid date')
     })
   })
 
-  it('should throw if the first child of the date span was not an object with innerText', () => {
-    const badNodes = ['something', 2, null, true, {}]
-    badNodes.forEach(badNode => {
-      const dateSpanStub = {
-        childElementCount: 2,
-        childNodes: [badNode, { innerText: '' }]
-      } as any as Element
-      expect(() => scrapeDate(dateSpanStub, 2019)).to.throw(Error, 'Month field did not have an innerText')
+  describe('validateDate', () => {
+    it('should reject invalid dates', () => {
+      const invalidDates = ['', 'foo', 'Saturday, 43 January 2000', 'Monday, 9 February 2019']
+      invalidDates.forEach(invalidDate => expect(validateDate(invalidDate)).to.equal(undefined))
     })
-  })
 
-  it('should throw if the first child of the date span did not contain a valid 3-character month', () => {
-    const badMonthStrings = ['', 'February', '2', 'fish']
-    badMonthStrings.forEach(badMonthString => {
-      const dateSpanStub = {
-        childElementCount: 2,
-        childNodes: [{ innerText: badMonthString }]
-      } as any as Element
-      expect(() => scrapeDate(dateSpanStub, 2019)).to.throw(Error, `Month field was invalid: ${badMonthString}`)
-    })
-  })
-
-  it('should throw if the second child of the date span was not an object with innerText', () => {
-    const badNodes = ['something', 2, null, true, {}]
-    badNodes.forEach(badNode => {
-      const dateSpanStub = {
-        childElementCount: 2,
-        childNodes: [{ innerText: 'JAN' }, badNode]
-      } as any as Element
-      expect(() => scrapeDate(dateSpanStub, 2019)).to.throw(Error, 'Day of month field did not have an innerText')
-    })
-  })
-
-  it('should throw if the second child of the date span did not contain a valid number', () => {
-    const badDayOfMonthStrings = ['', 'fish']
-    badDayOfMonthStrings.forEach(badDayOfMonthString => {
-      const dateSpanStub = {
-        childElementCount: 2,
-        childNodes: [{ innerText: 'JAN' }, { innerText: badDayOfMonthString }]
-      } as any as Element
-      expect(() => scrapeDate(dateSpanStub, 2019)).to.throw(Error, `Day of month field was invalid: ${badDayOfMonthString}`)
-    })
-  })
-
-  it('should parse dates correctly', () => {
-    const testCases = [
-      { actual: { year: 2019, month: 'JAN', day: '01' }, expected: { year: 2019, month: 1, day: 1 } },
-      { actual: { year: 2004, month: 'MAY', day: '29' }, expected: { year: 2004, month: 5, day: 29 } },
-      { actual: { year: 2010, month: 'AUG', day: '12' }, expected: { year: 2010, month: 8, day: 12 } },
-      { actual: { year: 2032, month: 'DEC', day: '31' }, expected: { year: 2032, month: 12, day: 31 } }
-    ]
-    testCases.forEach(({ actual, expected }) => {
-      const dateSpanStub = {
-        childElementCount: 2,
-        childNodes: [{ innerText: actual.month }, { innerText: actual.day }]
-      } as any as Element
-      expect(scrapeDate(dateSpanStub, actual.year)).to.deep.equal(expected)
+    it('should parse valid dates', () => {
+      const testCases = [
+        { dateString: 'Saturday, 9 February 2019', expectedDate: { year: 2019, month: 2, day: 9 } },
+        { dateString: 'Thursday, 28 February 2019', expectedDate: { year: 2019, month: 2, day: 28 } },
+        { dateString: 'Saturday, 9 February 2019', expectedDate: { year: 2019, month: 2, day: 9 } }
+      ]
+      testCases.forEach(({ dateString, expectedDate }) => {
+        expect(validateDate(dateString)).to.deep.equal(expectedDate)
+      })
     })
   })
 })

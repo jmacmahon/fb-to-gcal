@@ -5,7 +5,9 @@
   "main": "build/src/index.js",
   "author": "Joe MacMahon <joe.macmahon@gmail.com>",
   "license": "GPL-3.0-or-later",
-  "dependencies": {},
+  "dependencies": {
+    "moment": "^2.24.0"
+  },
   "devDependencies": {
     "@types/chai": "^4.1.7",
     "@types/jsdom": "^12.2.1",
